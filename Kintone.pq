@@ -68,7 +68,7 @@ GetAllKintoneRecords = (
                         ],
                 result = Web.Contents(baseUrl, [
                     Headers = headers,
-                    relativePath = path,
+                    RelativePath = path,
                     Query = query
                 ])
             in
@@ -145,14 +145,14 @@ GetAllKintoneRecords = (
                 )
             in
                 newRecord,
-        createTypeList = (kintoneFields as record) as list =>
+        createTypeList = (kintoneFields as record, kintoneRecord as record) as list =>
             let
-                kintoneRecordFieldCodes = Record.FieldNames(kintoneFields),
+                kintoneRecordFieldCodes = Record.FieldNames(kintoneRecord),
                 kintoneFieldTypes = List.Transform(
                     kintoneRecordFieldCodes,
                     (fieldCode as text) =>
                         let
-                            fieldType = Record.Field(kintoneFields, fieldCode)[type],
+                            fieldType = Record.Field(kintoneRecord, fieldCode)[type],
                             textValueFields = {
                                 "RECORD_NUMBER",
                                 "SINGLE_LINE_TEXT",
@@ -164,7 +164,7 @@ GetAllKintoneRecords = (
                                 "STATUS"
                             },
                             numberValueFields = {"__ID__", "__REVISION__", "NUMBER"},
-                            culcField = {"CALC"},
+                            calcField = {"CALC"},
                             dateValueFields = {"DATE"},
                             dateTimeValueFields = {"CREATED_TIME", "UPDATED_TIME", "DATETIME"},
                             timeValueFields = {"TIME"},
@@ -183,7 +183,8 @@ GetAllKintoneRecords = (
                                     type text
                                 else if List.Contains(numberValueFields, fieldType) then
                                     type number
-                                else if List.Contains(culcField, fieldType) then
+                                    // The field type of CALC is determined by the format
+                                else if List.Contains(calcField, fieldType) then
                                     let
                                         fieldFormat = Record.Field(kintoneFields, fieldCode)[format],
                                         columnType =
@@ -224,7 +225,7 @@ GetAllKintoneRecords = (
         fields = getAppFields()[properties],
         allRawRecords = getAllRecords(0, {}),
         convertedRecords = List.Transform(allRawRecords, (rawRecord) => extractValuesFromEachFields(rawRecord)),
-        columnTypeList = createTypeList(fields),
+        columnTypeList = createTypeList(fields, allRawRecords{0}),
         allRecordsTable = Table.FromRecords(convertedRecords),
         convertedTable = Table.TransformColumnTypes(allRecordsTable, columnTypeList)
     in

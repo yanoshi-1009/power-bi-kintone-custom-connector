@@ -25,11 +25,13 @@ KintoneConnectorConfigType = type function (
             Documentation.FieldDescription = "The ID of the Kintone App you want to connect to."
         ]
     ),
+    // Guest space ID is optional.
+    // However, optional parameters are not used to the test connection function and we cannot pass the test without guest space id if we want to connect to the guest space.
+    // Therefore, I will define it as a required parameter.
     guestSpaceId as (
         type number meta [
             Documentation.FieldCaption = "Guest Space ID (Or 0 for non guest space)",
-            Documentation.FieldDescription = "The guest space ID of the Kintone App you want to connect to.",
-            Documentation.defaultValue = 0
+            Documentation.FieldDescription = "The guest space ID of the Kintone App you want to connect to."
         ]
     ),
     optional fieldCodes as (
@@ -153,6 +155,7 @@ GetAllKintoneRecords = (
                                 Record.Field(kintoneRecord, fieldCode)[type]
                             else
                                 fieldFormat,
+                        // Field fomats which is used with calculated field are included in the field type.
                         textValueFields = {
                             "RECORD_NUMBER",
                             "SINGLE_LINE_TEXT",

@@ -22,8 +22,16 @@ KintoneConnectorConfigType = type function (
     appId as (
         type number meta [
             Documentation.FieldCaption = "App ID",
-            Documentation.FieldDescription = "The ID of the Kintone App you want to connect to.",
-            Documentation.SampleValues = 1
+            Documentation.FieldDescription = "The ID of the Kintone App you want to connect to."
+        ]
+    ),
+    // Guest space ID is optional.
+    // However, optional parameters are not used to the test connection function and we cannot pass the test without guest space id if we want to connect to the guest space.
+    // Therefore, I will define it as a required parameter.
+    guestSpaceId as (
+        type number meta [
+            Documentation.FieldCaption = "Guest Space ID (Or 0 for non guest space)",
+            Documentation.FieldDescription = "The guest space ID of the Kintone App you want to connect to."
         ]
     ),
     optional fieldCodes as (
@@ -32,13 +40,6 @@ KintoneConnectorConfigType = type function (
             Documentation.FieldDescription = "The field codes of the fields you want to retrieve. If you leave this field empty, all fields will be retrieved.",
             Documentation.SampleValues = "company_name,employee_name"
         ]
-    ),
-    optional guestSpaceId as (
-        type number meta [
-            Documentation.FieldCaption = "Guest Space ID",
-            Documentation.FieldDescription = "The guest space ID of the Kintone App you want to connect to. If you leave this field empty, the default space will be used.",
-            Documentation.SampleValues = 1
-        ]
     )
 ) as table meta [
     Documentation.Name = "Kintone Connector",
@@ -46,25 +47,24 @@ KintoneConnectorConfigType = type function (
 ];
 
 GetAllKintoneRecords = (
-    subDomain as text, domain as text, appId as number, optional fieldCodes as text, optional guestSpaceId as number
+    subDomain as text, domain as text, appId as number, guestSpaceId as number, optional fieldCodes as text
 ) as table =>
     let
         baseUrl = "https://" & subDomain & "." & domain,
         requestKintoneApi = (path as text, query as record) as record =>
             let
-                userName = Extension.CurrentCredential()[Username],
-                password = Extension.CurrentCredential()[Password],
-                apiKey = Extension.CurrentCredential()[Key],
+                currentCredential = Extension.CurrentCredential(),
                 headers =
-                    if apiKey = null then
+                    if Record.HasFields(currentCredential, "Key") then
                         [
-                            #"X-Cybozu-Authorization" = Binary.ToText(
-                                Text.ToBinary(userName & ":" & password), BinaryEncoding.Base64
-                            )
+                            #"X-Cybozu-API-Token" = currentCredential[Key]
                         ]
                     else
                         [
-                            #"X-Cybozu-API-Token" = apiKey
+                            #"X-Cybozu-Authorization" = Binary.ToText(
+                                Text.ToBinary(currentCredential[Username] & ":" & currentCredential[Password]),
+                                BinaryEncoding.Base64
+                            )
                         ],
                 result = Web.Contents(baseUrl, [
                     Headers = headers,
@@ -76,7 +76,7 @@ GetAllKintoneRecords = (
         getAppFields = () as record =>
             let
                 relativePath =
-                    if guestSpaceId = null then
+                    if guestSpaceId = 0 then
                         "k/v1/app/form/fields.json"
                     else
                         "/k/guest/" & Text.From(guestSpaceId) & "/v1/app/form/fields.json",
@@ -88,7 +88,7 @@ GetAllKintoneRecords = (
         getRecords = (query as text) as record =>
             let
                 relativePath =
-                    if guestSpaceId = null then
+                    if guestSpaceId = 0 then
                         "/k/v1/records.json"
                     else
                         "/k/guest/" & Text.From(guestSpaceId) & "/v1/records.json",
@@ -155,6 +155,7 @@ GetAllKintoneRecords = (
                                 Record.Field(kintoneRecord, fieldCode)[type]
                             else
                                 fieldFormat,
+                        // Field fomats which is used with calculated field are included in the field type.
                         textValueFields = {
                             "RECORD_NUMBER",
                             "SINGLE_LINE_TEXT",
@@ -232,9 +233,10 @@ Kintone = [
             config = Json.Document(dataSourcePath),
             subDomain = config[subDomain],
             domain = config[domain],
-            appId = config[appId]
+            appId = config[appId],
+            guestSpaceId = config[guestSpaceId]
         in
-            {"Kintone.Contents", subDomain, domain, appId},
+            {"Kintone.Contents", subDomain, domain, appId, guestSpaceId},
     Authentication = [
         Key = [
             KeyLabel = "API Token",

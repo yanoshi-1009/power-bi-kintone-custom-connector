@@ -130,9 +130,11 @@ GetAllKintoneRecords = (subDomain as text, domain as text, appId as number, opti
                                 "LINK",
                                 "RADIO_BUTTON",
                                 "DROP_DOWN",
-                                "STATUS"
+                                "STATUS",
+                                // Calculated Field Value Type depends on the field format
+                                "CALC"
                             },
-                            numberValueFields = {"__ID__", "__REVISION__", "NUMBER", "CALC"},
+                            numberValueFields = {"__ID__", "__REVISION__", "NUMBER"},
                             dateValueFields = {"DATE"},
                             dateTimeValueFields = {"CREATED_TIME", "UPDATED_TIME", "DATETIME"},
                             timeValueFields = {"TIME"},

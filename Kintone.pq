@@ -22,7 +22,7 @@ KintoneConnectorConfigType = type function (
     appId as (
         type number meta [
             Documentation.FieldCaption = "App ID",
-            Documentation.FieldDescription = "The App ID of the Kintone App you want to connect to.",
+            Documentation.FieldDescription = "The ID of the Kintone App you want to connect to.",
             Documentation.SampleValues = 1
         ]
     ),
@@ -36,7 +36,7 @@ KintoneConnectorConfigType = type function (
     optional guestSpaceId as (
         type number meta [
             Documentation.FieldCaption = "Guest Space ID",
-            Documentation.FieldDescription = "Fill in this field if you want to connect to a guest space.",
+            Documentation.FieldDescription = "The guest space ID of the Kintone App you want to connect to. If you leave this field empty, the default space will be used.",
             Documentation.SampleValues = 1
         ]
     )
@@ -148,76 +148,70 @@ GetAllKintoneRecords = (
         createTypeList = (kintoneFields as record, kintoneRecord as record) as list =>
             let
                 kintoneRecordFieldCodes = Record.FieldNames(kintoneRecord),
+                determinType = (fieldCode as text, optional fieldFormat as text) as type =>
+                    let
+                        fieldType =
+                            if fieldFormat = null then
+                                Record.Field(kintoneRecord, fieldCode)[type]
+                            else
+                                fieldFormat,
+                        textValueFields = {
+                            "RECORD_NUMBER",
+                            "SINGLE_LINE_TEXT",
+                            "MULTI_LINE_TEXT",
+                            "RICH_TEXT",
+                            "LINK",
+                            "RADIO_BUTTON",
+                            "DROP_DOWN",
+                            "STATUS",
+                            "HOUR_MINUTE",
+                            "DAY_HOUR_MINUTE"
+                        },
+                        numberValueFields = {"__ID__", "__REVISION__", "NUMBER", "NUMBER_DIGIT"},
+                        calcField = {"CALC"},
+                        dateValueFields = {"DATE"},
+                        dateTimeValueFields = {"CREATED_TIME", "UPDATED_TIME", "DATETIME"},
+                        timeValueFields = {"TIME"},
+                        listValueFields = {"CHECK_BOX", "MULTI_SELECT", "CATEGORY"},
+                        objectValueFields = {"CREATOR", "MODIFIER"},
+                        objectListValueFields = {
+                            "USER_SELECT",
+                            "ORGANIZATION_SELECT",
+                            "GROUP_SELECT",
+                            "FILE",
+                            "STATUS_ASSIGNEE",
+                            "SUBTABLE"
+                        },
+                        columnType =
+                            if List.Contains(textValueFields, fieldType) then
+                                type text
+                            else if List.Contains(numberValueFields, fieldType) then
+                                type number
+                                // The field type of CALC is determined by the format
+                            else if List.Contains(calcField, fieldType) then
+                                let
+                                    fieldFormat = Record.Field(kintoneFields, fieldCode)[format],
+                                    columnType = @determinType(fieldCode, fieldFormat)
+                                in
+                                    columnType
+                            else if List.Contains(dateValueFields, fieldType) then
+                                type date
+                            else if List.Contains(dateTimeValueFields, fieldType) then
+                                type datetime
+                            else if List.Contains(timeValueFields, fieldType) then
+                                type time
+                            else if List.Contains(listValueFields, fieldType) then
+                                type any
+                            else if List.Contains(objectValueFields, fieldType) then
+                                type any
+                            else if List.Contains(objectListValueFields, fieldType) then
+                                type any
+                            else
+                                Error.Record("UnsupportedFieldType", "Unsupported field type: " & fieldType)
+                    in
+                        columnType,
                 kintoneFieldTypes = List.Transform(
-                    kintoneRecordFieldCodes,
-                    (fieldCode as text) =>
-                        let
-                            fieldType = Record.Field(kintoneRecord, fieldCode)[type],
-                            textValueFields = {
-                                "RECORD_NUMBER",
-                                "SINGLE_LINE_TEXT",
-                                "MULTI_LINE_TEXT",
-                                "RICH_TEXT",
-                                "LINK",
-                                "RADIO_BUTTON",
-                                "DROP_DOWN",
-                                "STATUS"
-                            },
-                            numberValueFields = {"__ID__", "__REVISION__", "NUMBER"},
-                            calcField = {"CALC"},
-                            dateValueFields = {"DATE"},
-                            dateTimeValueFields = {"CREATED_TIME", "UPDATED_TIME", "DATETIME"},
-                            timeValueFields = {"TIME"},
-                            listValueFields = {"CHECK_BOX", "MULTI_SELECT", "CATEGORY"},
-                            objectValueFields = {"CREATOR", "MODIFIER"},
-                            objectListValueFields = {
-                                "USER_SELECT",
-                                "ORGANIZATION_SELECT",
-                                "GROUP_SELECT",
-                                "FILE",
-                                "STATUS_ASSIGNEE",
-                                "SUBTABLE"
-                            },
-                            columnType =
-                                if List.Contains(textValueFields, fieldType) then
-                                    type text
-                                else if List.Contains(numberValueFields, fieldType) then
-                                    type number
-                                    // The field type of CALC is determined by the format
-                                else if List.Contains(calcField, fieldType) then
-                                    let
-                                        fieldFormat = Record.Field(kintoneFields, fieldCode)[format],
-                                        columnType =
-                                            if List.Contains({"NUMBER", "DECIMAL"}, fieldFormat) then
-                                                type number
-                                            else if List.Contains({"DATETIME"}, fieldFormat) then
-                                                type datetime
-                                            else if List.Contains({"DATE"}, fieldFormat) then
-                                                type date
-                                            else if List.Contains({"TIME"}, fieldFormat) then
-                                                type time
-                                            else if List.Contains({"HOUR_MINUTE", "DAY_HOUR_MINUTE"}, fieldFormat) then
-                                                type text
-                                            else
-                                                type any
-                                    in
-                                        columnType
-                                else if List.Contains(dateValueFields, fieldType) then
-                                    type date
-                                else if List.Contains(dateTimeValueFields, fieldType) then
-                                    type datetime
-                                else if List.Contains(timeValueFields, fieldType) then
-                                    type time
-                                else if List.Contains(listValueFields, fieldType) then
-                                    type any
-                                else if List.Contains(objectValueFields, fieldType) then
-                                    type any
-                                else if List.Contains(objectListValueFields, fieldType) then
-                                    type any
-                                else
-                                    Error.Record("UnsupportedFieldType", "Unsupported field type: " & fieldType)
-                        in
-                            {fieldCode, columnType}
+                    kintoneRecordFieldCodes, (fieldCode as text) => {fieldCode, determinType(fieldCode)}
                 )
             in
                 kintoneFieldTypes,

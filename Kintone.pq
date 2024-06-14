@@ -148,7 +148,7 @@ GetAllKintoneRecords = (
         createTypeList = (kintoneFields as record, kintoneRecord as record) as list =>
             let
                 kintoneRecordFieldCodes = Record.FieldNames(kintoneRecord),
-                determinType = (fieldCode as text, optional fieldFormat as text) as record =>
+                determinType = (fieldCode as text, optional fieldFormat as text) as type =>
                     let
                         fieldType =
                             if fieldFormat = null then
@@ -167,7 +167,7 @@ GetAllKintoneRecords = (
                             "HOUR_MINUTE",
                             "DAY_HOUR_MINUTE"
                         },
-                        numberValueFields = {"__ID__", "__REVISION__", "NUMBER", "DECIMAL"},
+                        numberValueFields = {"__ID__", "__REVISION__", "NUMBER", "NUMBER_DIGIT"},
                         calcField = {"CALC"},
                         dateValueFields = {"DATE"},
                         dateTimeValueFields = {"CREATED_TIME", "UPDATED_TIME", "DATETIME"},
@@ -209,8 +209,10 @@ GetAllKintoneRecords = (
                             else
                                 Error.Record("UnsupportedFieldType", "Unsupported field type: " & fieldType)
                     in
-                        {fieldCode, columnType},
-                kintoneFieldTypes = List.Transform(kintoneRecordFieldCodes, (fieldCode) => determinType(fieldCode))
+                        columnType,
+                kintoneFieldTypes = List.Transform(
+                    kintoneRecordFieldCodes, (fieldCode as text) => {fieldCode, determinType(fieldCode)}
+                )
             in
                 kintoneFieldTypes,
         // Main

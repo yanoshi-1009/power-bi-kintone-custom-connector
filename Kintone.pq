@@ -32,17 +32,25 @@ KintoneConnectorConfigType = type function (
             Documentation.FieldDescription = "The field codes of the fields you want to retrieve. If you leave this field empty, all fields will be retrieved.",
             Documentation.SampleValues = "company_name,employee_name"
         ]
+    ),
+    optional guestSpaceId as (
+        type number meta [
+            Documentation.FieldCaption = "Guest Space ID",
+            Documentation.FieldDescription = "Fill in this field if you want to connect to a guest space.",
+            Documentation.SampleValues = 1
+        ]
     )
 ) as table meta [
     Documentation.Name = "Kintone Connector",
     Documentation.LongDescription = "This section is used to set the description for the Kintone data source."
 ];
 
-GetAllKintoneRecords = (subDomain as text, domain as text, appId as number, optional fieldCodes as text) as table =>
+GetAllKintoneRecords = (
+    subDomain as text, domain as text, appId as number, optional fieldCodes as text, optional guestSpaceId as number
+) as table =>
     let
-        relativePath = "/k/v1/records.json",
-        url = "https://" & subDomain & "." & domain & relativePath & "?app=" & Text.From(appId),
-        getRecords = (query as text) as record =>
+        baseUrl = "https://" & subDomain & "." & domain,
+        requestKintoneApi = (path as text, query as record) as record =>
             let
                 userName = Extension.CurrentCredential()[Username],
                 password = Extension.CurrentCredential()[Password],
@@ -58,17 +66,40 @@ GetAllKintoneRecords = (subDomain as text, domain as text, appId as number, opti
                         [
                             #"X-Cybozu-API-Token" = apiKey
                         ],
-                query = [
-                    query = query,
-                    // $id is always included in the response to get the next records
-                    fields = if fieldCodes = null then {} else List.Combine({{"$id"}, Text.Split(fieldCodes, ",")})
-                ],
-                result = Web.Contents(url, [
+                result = Web.Contents(baseUrl, [
                     Headers = headers,
+                    RelativePath = path,
                     Query = query
                 ])
             in
                 Json.Document(result),
+        getAppFields = () as record =>
+            let
+                relativePath =
+                    if guestSpaceId = null then
+                        "k/v1/app/form/fields.json"
+                    else
+                        "/k/guest/" & Text.From(guestSpaceId) & "/v1/app/form/fields.json",
+                query = [
+                    app = Text.From(appId)
+                ]
+            in
+                requestKintoneApi(relativePath, query),
+        getRecords = (query as text) as record =>
+            let
+                relativePath =
+                    if guestSpaceId = null then
+                        "/k/v1/records.json"
+                    else
+                        "/k/guest/" & Text.From(guestSpaceId) & "/v1/records.json",
+                query = [
+                    query = query,
+                    // $id is always included in the response to get the next records
+                    app = Text.From(appId),
+                    fields = if fieldCodes = null then {} else List.Combine({{"$id"}, Text.Split(fieldCodes, ",")})
+                ]
+            in
+                requestKintoneApi(relativePath, query),
         getAllRecords = (lastId as number, rawRecords as list) as list =>
             let
                 LIMIT = 500,
@@ -114,7 +145,7 @@ GetAllKintoneRecords = (subDomain as text, domain as text, appId as number, opti
                 )
             in
                 newRecord,
-        createTypeList = (kintoneRecord as record) as list =>
+        createTypeList = (kintoneFields as record, kintoneRecord as record) as list =>
             let
                 kintoneRecordFieldCodes = Record.FieldNames(kintoneRecord),
                 kintoneFieldTypes = List.Transform(
@@ -132,7 +163,8 @@ GetAllKintoneRecords = (subDomain as text, domain as text, appId as number, opti
                                 "DROP_DOWN",
                                 "STATUS"
                             },
-                            numberValueFields = {"__ID__", "__REVISION__", "NUMBER", "CALC"},
+                            numberValueFields = {"__ID__", "__REVISION__", "NUMBER"},
+                            calcField = {"CALC"},
                             dateValueFields = {"DATE"},
                             dateTimeValueFields = {"CREATED_TIME", "UPDATED_TIME", "DATETIME"},
                             timeValueFields = {"TIME"},
@@ -151,6 +183,25 @@ GetAllKintoneRecords = (subDomain as text, domain as text, appId as number, opti
                                     type text
                                 else if List.Contains(numberValueFields, fieldType) then
                                     type number
+                                    // The field type of CALC is determined by the format
+                                else if List.Contains(calcField, fieldType) then
+                                    let
+                                        fieldFormat = Record.Field(kintoneFields, fieldCode)[format],
+                                        columnType =
+                                            if List.Contains({"NUMBER", "DECIMAL"}, fieldFormat) then
+                                                type number
+                                            else if List.Contains({"DATETIME"}, fieldFormat) then
+                                                type datetime
+                                            else if List.Contains({"DATE"}, fieldFormat) then
+                                                type date
+                                            else if List.Contains({"TIME"}, fieldFormat) then
+                                                type time
+                                            else if List.Contains({"HOUR_MINUTE", "DAY_HOUR_MINUTE"}, fieldFormat) then
+                                                type text
+                                            else
+                                                type any
+                                    in
+                                        columnType
                                 else if List.Contains(dateValueFields, fieldType) then
                                     type date
                                 else if List.Contains(dateTimeValueFields, fieldType) then
@@ -171,9 +222,10 @@ GetAllKintoneRecords = (subDomain as text, domain as text, appId as number, opti
             in
                 kintoneFieldTypes,
         // Main
+        fields = getAppFields()[properties],
         allRawRecords = getAllRecords(0, {}),
         convertedRecords = List.Transform(allRawRecords, (rawRecord) => extractValuesFromEachFields(rawRecord)),
-        columnTypeList = createTypeList(allRawRecords{0}),
+        columnTypeList = createTypeList(fields, allRawRecords{0}),
         allRecordsTable = Table.FromRecords(convertedRecords),
         convertedTable = Table.TransformColumnTypes(allRecordsTable, columnTypeList)
     in

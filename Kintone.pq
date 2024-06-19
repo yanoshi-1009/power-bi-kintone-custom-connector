@@ -129,7 +129,8 @@ GetAllKintoneRecords = (
                                 let
                                     subtableValue = fieldObject[value],
                                     extractedSubtableFieldValues = List.Transform(
-                                        subtableValue, (subtableRow) => @extractValuesFromEachFields(subtableRow)
+                                        subtableValue,
+                                        (subtableRow) => @extractValuesFromEachFields(subtableRow[value])
                                     )
                                 in
                                     extractedSubtableFieldValues

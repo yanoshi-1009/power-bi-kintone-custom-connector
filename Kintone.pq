@@ -59,7 +59,7 @@ GetAllKintoneRecords = (
                         [
                             #"X-Cybozu-API-Token" = currentCredential[Key]
                         ]
-                    else
+                    else 
                         [
                             #"X-Cybozu-Authorization" = Binary.ToText(
                                 Text.ToBinary(currentCredential[Username] & ":" & currentCredential[Password]),
@@ -94,8 +94,8 @@ GetAllKintoneRecords = (
                         "/k/guest/" & Text.From(guestSpaceId) & "/v1/records.json",
                 query = [
                     query = query,
-                    // $id is always included in the response to get the next records
                     app = Text.From(appId),
+                    // $id is always included in the response to get the next records
                     fields = if fieldCodes = null then {} else List.Combine({{"$id"}, Text.Split(fieldCodes, ",")})
                 ]
             in
@@ -117,30 +117,58 @@ GetAllKintoneRecords = (
                         List.Combine({rawRecords, kintoneRecords})
             in
                 allRecords,
-        extractValuesFromEachFields = (kintoneRecord as record) as record =>
+        convertFieldValuesOfEachFields = (kintoneRecord as record) as record =>
             let
-                extractFieldValue = (fieldObject as record) as any =>
+                convertFieldValue = (fieldObject as record) as any =>
                     let
                         fieldType = fieldObject[type],
-                        fieldValue =
-                            if fieldType <> "SUBTABLE" then
-                                fieldObject[value]
-                            else
-                                let
-                                    subtableValue = fieldObject[value],
-                                    extractedSubtableFieldValues = List.Transform(
-                                        subtableValue,
-                                        (subtableRow) => @extractValuesFromEachFields(subtableRow[value])
-                                    )
-                                in
-                                    extractedSubtableFieldValues
+                        fieldValue = fieldObject[value],
+                        subTableFieldTypes = {"SUBTABLE"},
+                        listValueFieldTypes = {"CHECK_BOX", "MULTI_SELECT", "CATEGORY"},
+                        objectListValueFieldTypes = {
+                            "USER_SELECT",
+                            "ORGANIZATION_SELECT",
+                            "GROUP_SELECT",
+                            "FILE",
+                            "STATUS_ASSIGNEE"
+                        },
+                        objectValueFieldTypes = {"CREATOR", "MODIFIER"},
+                        convertedFieldValue =
+                        if List.Contains(subTableFieldTypes, fieldType) then
+                            let
+                                extractedSubtableFieldValues = List.Transform(
+                                    fieldValue, (subtableRow) => @convertFieldValuesOfEachFields(subtableRow)
+                                )
+                            in
+                                extractedSubtableFieldValues
+                        else if List.Contains(listValueFieldTypes, fieldType) then
+                            let
+                                convertedListValue = Text.Combine(fieldValue, ", ")
+                            in
+                                convertedListValue
+                        else if List.Contains(objectListValueFieldTypes, fieldType) then
+                            let
+                                extractedNameValues = List.Transform(
+                                    fieldValue, (objectListItem) => objectListItem[name]
+                                ),
+                                convertedObjectListValue = Text.Combine(fieldValue, ", ")
+                            in
+                                convertedObjectListValue
+                        else if List.Contains(objectValueFieldTypes, fieldType) then
+                            let
+                                convertedObjectValue = fieldValue[name]
+                            in
+                                convertedObjectValue
+                        else
+                            fieldValue
+>>>>>>> Stashed changes
                     in
-                        fieldValue,
+                        convertedFieldValue,
                 kintoneRecordFieldCodes = Record.FieldNames(kintoneRecord),
                 newRecord = Record.FromList(
                     List.Transform(
                         kintoneRecordFieldCodes,
-                        (fieldCode) => extractFieldValue(Record.Field(kintoneRecord, fieldCode))
+                        (fieldCode) => convertFieldValue(Record.Field(kintoneRecord, fieldCode))
                     ),
                     kintoneRecordFieldCodes
                 )
@@ -220,7 +248,7 @@ GetAllKintoneRecords = (
         // Main
         fields = getAppFields()[properties],
         allRawRecords = getAllRecords(0, {}),
-        convertedRecords = List.Transform(allRawRecords, (rawRecord) => extractValuesFromEachFields(rawRecord)),
+        convertedRecords = List.Transform(allRawRecords, (rawRecord) => convertFieldValuesOfEachFields(rawRecord)),
         columnTypeList = createTypeList(fields, allRawRecords{0}),
         allRecordsTable = Table.FromRecords(convertedRecords),
         convertedTable = Table.TransformColumnTypes(allRecordsTable, columnTypeList)

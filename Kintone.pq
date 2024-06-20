@@ -59,7 +59,7 @@ GetAllKintoneRecords = (
                         [
                             #"X-Cybozu-API-Token" = currentCredential[Key]
                         ]
-                    else 
+                    else
                         [
                             #"X-Cybozu-Authorization" = Binary.ToText(
                                 Text.ToBinary(currentCredential[Username] & ":" & currentCredential[Password]),
@@ -134,34 +134,34 @@ GetAllKintoneRecords = (
                         },
                         objectValueFieldTypes = {"CREATOR", "MODIFIER"},
                         convertedFieldValue =
-                        if List.Contains(subTableFieldTypes, fieldType) then
-                            let
-                                extractedSubtableFieldValues = List.Transform(
-                                    fieldValue, (subtableRow) => @convertFieldValuesOfEachFields(subtableRow)
-                                )
-                            in
-                                extractedSubtableFieldValues
-                        else if List.Contains(listValueFieldTypes, fieldType) then
-                            let
-                                convertedListValue = Text.Combine(fieldValue, ", ")
-                            in
-                                convertedListValue
-                        else if List.Contains(objectListValueFieldTypes, fieldType) then
-                            let
-                                extractedNameValues = List.Transform(
-                                    fieldValue, (objectListItem) => objectListItem[name]
-                                ),
-                                convertedObjectListValue = Text.Combine(fieldValue, ", ")
-                            in
-                                convertedObjectListValue
-                        else if List.Contains(objectValueFieldTypes, fieldType) then
-                            let
-                                convertedObjectValue = fieldValue[name]
-                            in
-                                convertedObjectValue
-                        else
-                            fieldValue
->>>>>>> Stashed changes
+                            if List.Contains(subTableFieldTypes, fieldType) then
+                                let
+                                    extractedSubtableFieldValues = List.Transform(
+                                        fieldValue,
+                                        (subtableRow) => @convertFieldValuesOfEachFields(subtableRow[value])
+                                    )
+                                in
+                                    extractedSubtableFieldValues
+                            else if List.Contains(listValueFieldTypes, fieldType) then
+                                let
+                                    convertedListValue = Text.Combine(fieldValue, ", ")
+                                in
+                                    convertedListValue
+                            else if List.Contains(objectListValueFieldTypes, fieldType) then
+                                let
+                                    extractedNameValues = List.Transform(
+                                        fieldValue, (objectListItem) => objectListItem[name]
+                                    ),
+                                    convertedObjectListValue = Text.Combine(extractedNameValues, ", ")
+                                in
+                                    convertedObjectListValue
+                            else if List.Contains(objectValueFieldTypes, fieldType) then
+                                let
+                                    convertedObjectValue = fieldValue[name]
+                                in
+                                    convertedObjectValue
+                            else
+                                fieldValue
                     in
                         convertedFieldValue,
                 kintoneRecordFieldCodes = Record.FieldNames(kintoneRecord),
